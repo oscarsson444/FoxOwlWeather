@@ -1,0 +1,2 @@
+rootProject.name = "FoxOwl"
+include ':app'
