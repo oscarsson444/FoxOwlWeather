@@ -8,16 +8,23 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.app.SearchManager;
+import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Bundle;
 import android.os.Looper;
 import android.transition.AutoTransition;
 import android.transition.TransitionManager;
-import android.util.Log;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.SearchView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -38,12 +45,14 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.time.DayOfWeek;
+import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.List;
 import java.time.LocalDateTime;
+import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
-
 
     private static final int LOCATION_REQ_CODE = 1;
     private String cityString;
@@ -52,7 +61,9 @@ public class MainActivity extends AppCompatActivity {
     private TextView descText;
     private ImageView dailyWeatherImage;
     private List<List<String>> hourlyData;
-    private HourlyAdapter adapter;
+    private List<List<String>> weeklyData;
+    private HourlyAdapter hourlyAdapter;
+    private WeeklyAdapter weeklyAdapter;
     private FusedLocationProviderClient locationProvider;
     private RequestQueue queue;
 
@@ -63,12 +74,21 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         queue = Volley.newRequestQueue(this);
 
+        //Initiates the weekly RecyclerView
+        RecyclerView weeklyRecycler = findViewById(R.id.weeklyRecycler);
+        weeklyData = new ArrayList<>();
+        weeklyAdapter = new WeeklyAdapter(weeklyData);
+        RecyclerView.LayoutManager weeklyLayoutManager = new LinearLayoutManager(getApplicationContext(), LinearLayoutManager.HORIZONTAL, false);
+        weeklyRecycler.setLayoutManager(weeklyLayoutManager);
+        weeklyRecycler.setAdapter(weeklyAdapter);
+
+        //Initiates the daily RecyclerView
         RecyclerView hourlyRecycler = findViewById(R.id.hourlyRecycler);
         hourlyData = new ArrayList<>();
-        adapter = new HourlyAdapter(hourlyData);
-        RecyclerView.LayoutManager layoutManager = new LinearLayoutManager(getApplicationContext(), LinearLayoutManager.HORIZONTAL, false);
-        hourlyRecycler.setLayoutManager(layoutManager);
-        hourlyRecycler.setAdapter(adapter);
+        hourlyAdapter = new HourlyAdapter(hourlyData);
+        RecyclerView.LayoutManager dailyLayoutManager = new LinearLayoutManager(getApplicationContext(), LinearLayoutManager.HORIZONTAL, false);
+        hourlyRecycler.setLayoutManager(dailyLayoutManager);
+        hourlyRecycler.setAdapter(hourlyAdapter);
 
         locationProvider = LocationServices.getFusedLocationProviderClient(this);
         cityName = findViewById(R.id.cityNameTextView);
@@ -76,9 +96,12 @@ public class MainActivity extends AppCompatActivity {
         descText = findViewById(R.id.descriptionTextView);
         dailyWeatherImage = findViewById(R.id.weatherIcon);
 
+        /* Used for first design
+
         ConstraintLayout expandableLayout = findViewById(R.id.expandableLayout);
         Button arrowBtn = findViewById(R.id.arrowBtn);
         CardView dailyCardView = findViewById(R.id.dailyCardView);
+
 
         arrowBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -95,7 +118,36 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+         */
+
         getLocationPermission();
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        super.onCreateOptionsMenu(menu);
+        MenuInflater inflater = getMenuInflater();
+        inflater.inflate(R.menu.options_menu, menu);
+
+        MenuItem searchIcon = menu.findItem(R.id.search);
+        SearchView searchView = (SearchView) searchIcon.getActionView();
+        searchView.setQueryHint("Search Location!");
+
+        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+            @Override
+            public boolean onQueryTextSubmit(String s) {
+                Toast toast = Toast.makeText(getApplicationContext(), "text submit!", Toast.LENGTH_SHORT);
+                toast.show();
+                return true;
+            }
+
+            @Override
+            public boolean onQueryTextChange(String s) {
+                return false;
+            }
+        });
+
+        return true;
     }
 
     @SuppressLint("MissingPermission")
@@ -251,7 +303,7 @@ public class MainActivity extends AppCompatActivity {
         } catch (JSONException e) {
             e.printStackTrace();
         }
-        adapter.notifyDataSetChanged();
+        hourlyAdapter.notifyDataSetChanged();
     }
 
     private void parseCurrentWeatherData(JSONObject jsonResponse){
@@ -282,7 +334,41 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    //Första elementet i arrayen är dagens väder vid klockan 12
     private void parseWeeklyWeather(JSONObject jsonResponse){
+        try {
+            weeklyData.clear();
+            JSONArray weekList = jsonResponse.getJSONArray("daily");
+            LocalDateTime now = LocalDateTime.now();
+            DayOfWeek currentDay = now.getDayOfWeek();
+            for (int i = 0; i < 7; i++) {
+                JSONObject day = weekList.getJSONObject(i);
+                JSONObject temps = day.getJSONObject("temp");
+                String maxTemp = temps.getString("max");
+                String minTemp = temps.getString("min");
+                float tempFloat = Float.parseFloat(maxTemp);
+                maxTemp = String.valueOf((int) tempFloat);
+                tempFloat = Float.parseFloat(minTemp);
+                minTemp = String.valueOf((int) tempFloat);
 
+                JSONArray weatherArray = day.getJSONArray("weather");
+                JSONObject weatherObject = weatherArray.getJSONObject(0);
+                String main = weatherObject.getString("main");
+                String description = weatherObject.getString("description");
+                description = description.substring(0,1).toUpperCase() + description.substring(1).toLowerCase();
+                String dayName = currentDay.plus(i).getDisplayName(TextStyle.FULL, Locale.ENGLISH);
+
+                List<String> data = new ArrayList<>();
+                data.add(main);
+                data.add(maxTemp);
+                data.add(minTemp);
+                data.add(dayName);
+
+                weeklyData.add(data);
+            }
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        weeklyAdapter.notifyDataSetChanged();
     }
 }
